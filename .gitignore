@@ -4,8 +4,10 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 .kotlin
+.intellijPlatform/
 
 ### IntelliJ IDEA ###
+.idea/
 .idea/modules.xml
 .idea/jarRepositories.xml
 .idea/compiler.xml
@@ -38,6 +40,7 @@ bin/
 
 ### VS Code ###
 .vscode/
+.run/
 
 ### Mac OS ###
 .DS_Store
