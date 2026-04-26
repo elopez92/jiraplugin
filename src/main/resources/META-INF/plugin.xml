@@ -1,0 +1,25 @@
+<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<idea-plugin>
+    <id>com.elopez.jiraplugin</id>
+    <name>Jira Ticket</name>
+    <vendor url="https://www.yourcompany.com">YourCompany</vendor>
+    <description><![CDATA[
+        View Jira Cloud issue summary and description in a tool window while you work—no need to switch to the browser.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends optional="true">Git4Idea</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Jira"
+                    secondary="true"
+                    anchor="right"
+                    factoryClass="com.elopez.jiraplugin.ui.JiraToolWindowFactory"
+                    icon="/META-INF/pluginIcon.svg"/>
+        <applicationConfigurable
+                parentId="tools"
+                instance="com.elopez.jiraplugin.settings.JiraPluginConfigurable"
+                id="com.elopez.jiraplugin.settings"
+                displayName="Jira"/>
+    </extensions>
+</idea-plugin>
