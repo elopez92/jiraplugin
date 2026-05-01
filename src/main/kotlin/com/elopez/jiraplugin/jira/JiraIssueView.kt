@@ -5,6 +5,9 @@ data class JiraIssueView(
     val summary: String,
     val status: String,
     val issueType: String,
+    val assigneeAccountId: String? = null,
+    val assigneeDisplayName: String? = null,
+    val isWatching: Boolean = false,
     val descriptionHtml: String?,
     val descriptionPlainFallback: String?,
     val comments: List<JiraComment> = emptyList(),
@@ -28,6 +31,8 @@ data class JiraIssueListItem(
     val key: String,
     val summary: String,
     val status: String,
+    /** Epoch millis from `fields.updated`, or 0 if missing. */
+    val updatedEpochMillis: Long = 0L,
 )
 
 sealed class JiraSearchListResult {
@@ -35,4 +40,11 @@ sealed class JiraSearchListResult {
     data class ConfigError(val message: String) : JiraSearchListResult()
     data class HttpError(val code: Int, val message: String) : JiraSearchListResult()
     data class NetworkError(val message: String) : JiraSearchListResult()
+}
+
+sealed class JiraIssueActionResult {
+    data class Ok(val message: String) : JiraIssueActionResult()
+    data class ConfigError(val message: String) : JiraIssueActionResult()
+    data class HttpError(val code: Int, val message: String) : JiraIssueActionResult()
+    data class NetworkError(val message: String) : JiraIssueActionResult()
 }

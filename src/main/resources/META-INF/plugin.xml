@@ -1,25 +1,35 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
-<idea-plugin>
+<idea-plugin url="https://github.com/elopez92">
     <id>com.elopez.jiraplugin</id>
-    <name>Jira Ticket</name>
-    <vendor url="https://www.yourcompany.com">YourCompany</vendor>
+    <name>Jira Companion</name>
+    <resource-bundle>messages.JiraCompanionBundle</resource-bundle>
+    <vendor url="https://github.com/elopez92">E. Lopez</vendor>
     <description><![CDATA[
-        View Jira Cloud issue summary and description in a tool window while you work—no need to switch to the browser.
+        <p>Keep <b>Jira Cloud</b> next to your code: look up issues, read descriptions and comments, and run searches from a tool window—without living in the browser.</p>
+        <ul>
+            <li><b>Issue detail</b> — summary, status, type, assignee, rendered description, comments</li>
+            <li><b>Search</b> — JQL, saved filters, quick scopes, issue list with open-in-browser and copy key</li>
+            <li><b>Actions</b> — assign to me, watch / unwatch, add comments (REST API v3)</li>
+            <li><b>Git</b> (optional) — fill issue key from the current branch; create and checkout a branch from the loaded issue</li>
+            <li><b>Notifications-style feed</b> — tab with simple JQL-based feeds and optional auto-refresh</li>
+        </ul>
+        <p>Configure your site URL, Atlassian email, and API token under <b>Settings | Tools | Jira Companion</b>. The API token is stored using the IDE credential store.</p>
+        <p><b>Compatibility:</b> IntelliJ Platform 2024.1+ (build 241), including Android Studio Koala 2024.1.x and newer. Requires network access to your Jira site.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
-    <depends optional="true">Git4Idea</depends>
+    <depends optional="true" config-file="META-INF/optional-git.xml">Git4Idea</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow id="Jira"
                     secondary="true"
                     anchor="right"
                     factoryClass="com.elopez.jiraplugin.ui.JiraToolWindowFactory"
-                    icon="/META-INF/pluginIcon.svg"/>
+                    icon="/icons/pluginIcon.svg"/>
         <applicationConfigurable
                 parentId="tools"
                 instance="com.elopez.jiraplugin.settings.JiraPluginConfigurable"
                 id="com.elopez.jiraplugin.settings"
-                displayName="Jira"/>
+                displayName="Jira Companion"/>
     </extensions>
 </idea-plugin>

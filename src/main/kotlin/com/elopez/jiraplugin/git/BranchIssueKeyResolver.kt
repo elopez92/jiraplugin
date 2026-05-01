@@ -7,7 +7,7 @@ import git4idea.repo.GitRepositoryManager
 
 object BranchIssueKeyResolver {
 
-    private val keyPattern = Regex("[A-Z][A-Z0-9]+-\\d+")
+    private val keyPattern = Regex("(?i)\\b([a-z][a-z0-9]+-\\d+)\\b")
 
     fun isGitIntegrationAvailable(): Boolean {
         val plugin = PluginManagerCore.getPlugin(PluginId.getId("Git4Idea"))
@@ -17,7 +17,11 @@ object BranchIssueKeyResolver {
     fun resolveFromCurrentBranch(project: Project): String? {
         if (!isGitIntegrationAvailable()) return null
         val manager = GitRepositoryManager.getInstance(project)
-        val branch = manager.repositories.firstOrNull()?.currentBranchName ?: return null
-        return keyPattern.find(branch)?.value
+        val branches = manager.repositories.mapNotNull { it.currentBranchName }
+        for (branch in branches) {
+            val match = keyPattern.find(branch)?.groupValues?.getOrNull(1) ?: continue
+            return match.uppercase()
+        }
+        return null
     }
 }

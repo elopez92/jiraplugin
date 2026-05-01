@@ -44,3 +44,9 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Plugin signing (never commit) ###
+signing/
+*.pem
+chain.crt
+private.pem

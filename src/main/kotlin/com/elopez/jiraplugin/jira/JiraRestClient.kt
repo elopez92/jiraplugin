@@ -11,6 +11,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.time.Duration
+import java.time.OffsetDateTime
 import java.util.Base64
 
 internal object JiraRestClient {
@@ -27,7 +28,7 @@ internal object JiraRestClient {
     fun fetch(baseUrl: String, email: String, token: String, issueKey: String): JiraFetchResult {
         val keyEncoded = URLEncoder.encode(issueKey.trim(), StandardCharsets.UTF_8)
         val path =
-            "/rest/api/3/issue/$keyEncoded?fields=summary,status,issuetype,description,comment&expand=renderedFields"
+            "/rest/api/3/issue/$keyEncoded?fields=summary,status,issuetype,assignee,description,comment,watches&expand=renderedFields"
         val uri = URI.create(baseUrl.trimEnd('/') + path)
         val basicToken = basicAuth(email, token)
         val request = HttpRequest.newBuilder(uri)
@@ -57,6 +58,7 @@ internal object JiraRestClient {
         val fields = JsonArray().apply {
             add("summary")
             add("status")
+            add("updated")
         }
         val payload = JsonObject().apply {
             addProperty("jql", jql)
@@ -80,12 +82,156 @@ internal object JiraRestClient {
         }
     }
 
+    fun fetchCurrentAccountId(baseUrl: String, email: String, token: String): Result<String> {
+        val uri = URI.create(baseUrl.trimEnd('/') + "/rest/api/3/myself")
+        val basicToken = basicAuth(email, token)
+        val request = HttpRequest.newBuilder(uri)
+            .timeout(Duration.ofSeconds(60))
+            .header("Authorization", "Basic $basicToken")
+            .header("Accept", "application/json")
+            .GET()
+            .build()
+        return try {
+            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            if (response.statusCode() != 200) {
+                return Result.failure(IllegalStateException("Failed to fetch account id (HTTP ${response.statusCode()})."))
+            }
+            val root = JsonParser.parseString(response.body()).asJsonObject
+            val accountId = root.get("accountId")?.asString?.trim().orEmpty()
+            if (accountId.isBlank()) {
+                Result.failure(IllegalStateException("Missing accountId in /myself response."))
+            } else {
+                Result.success(accountId)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun assignIssueToAccountId(
+        baseUrl: String,
+        email: String,
+        token: String,
+        issueKey: String,
+        accountId: String,
+    ): JiraIssueActionResult {
+        val keyEncoded = URLEncoder.encode(issueKey.trim(), StandardCharsets.UTF_8)
+        val uri = URI.create(baseUrl.trimEnd('/') + "/rest/api/3/issue/$keyEncoded/assignee")
+        val basicToken = basicAuth(email, token)
+        val payload = JsonObject().apply { addProperty("accountId", accountId) }.toString()
+        val request = HttpRequest.newBuilder(uri)
+            .timeout(Duration.ofSeconds(60))
+            .header("Authorization", "Basic $basicToken")
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .PUT(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+            .build()
+        return try {
+            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            parseIssueActionResponse(response.statusCode(), response.body(), "Assigned issue to you.")
+        } catch (e: Exception) {
+            JiraIssueActionResult.NetworkError(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    fun addWatcher(
+        baseUrl: String,
+        email: String,
+        token: String,
+        issueKey: String,
+        accountId: String,
+    ): JiraIssueActionResult {
+        val keyEncoded = URLEncoder.encode(issueKey.trim(), StandardCharsets.UTF_8)
+        val uri = URI.create(baseUrl.trimEnd('/') + "/rest/api/3/issue/$keyEncoded/watchers")
+        val basicToken = basicAuth(email, token)
+        val request = HttpRequest.newBuilder(uri)
+            .timeout(Duration.ofSeconds(60))
+            .header("Authorization", "Basic $basicToken")
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString("\"$accountId\"", StandardCharsets.UTF_8))
+            .build()
+        return try {
+            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            parseIssueActionResponse(response.statusCode(), response.body(), "Issue added to your watched list.")
+        } catch (e: Exception) {
+            JiraIssueActionResult.NetworkError(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    fun removeWatcher(
+        baseUrl: String,
+        email: String,
+        token: String,
+        issueKey: String,
+        accountId: String,
+    ): JiraIssueActionResult {
+        val keyEncoded = URLEncoder.encode(issueKey.trim(), StandardCharsets.UTF_8)
+        val accountIdEncoded = URLEncoder.encode(accountId, StandardCharsets.UTF_8)
+        val uri = URI.create(baseUrl.trimEnd('/') + "/rest/api/3/issue/$keyEncoded/watchers?accountId=$accountIdEncoded")
+        val basicToken = basicAuth(email, token)
+        val request = HttpRequest.newBuilder(uri)
+            .timeout(Duration.ofSeconds(60))
+            .header("Authorization", "Basic $basicToken")
+            .header("Accept", "application/json")
+            .DELETE()
+            .build()
+        return try {
+            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            parseIssueActionResponse(response.statusCode(), response.body(), "Issue removed from your watched list.")
+        } catch (e: Exception) {
+            JiraIssueActionResult.NetworkError(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    fun addComment(
+        baseUrl: String,
+        email: String,
+        token: String,
+        issueKey: String,
+        commentText: String,
+    ): JiraIssueActionResult {
+        val keyEncoded = URLEncoder.encode(issueKey.trim(), StandardCharsets.UTF_8)
+        val uri = URI.create(baseUrl.trimEnd('/') + "/rest/api/3/issue/$keyEncoded/comment")
+        val basicToken = basicAuth(email, token)
+        val payload = JsonObject().apply {
+            add("body", JsonObject().apply {
+                addProperty("type", "doc")
+                addProperty("version", 1)
+                add("content", JsonArray().apply {
+                    add(JsonObject().apply {
+                        addProperty("type", "paragraph")
+                        add("content", JsonArray().apply {
+                            add(JsonObject().apply {
+                                addProperty("type", "text")
+                                addProperty("text", commentText)
+                            })
+                        })
+                    })
+                })
+            })
+        }.toString()
+        val request = HttpRequest.newBuilder(uri)
+            .timeout(Duration.ofSeconds(60))
+            .header("Authorization", "Basic $basicToken")
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+            .build()
+        return try {
+            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            parseIssueActionResponse(response.statusCode(), response.body(), "Comment added.")
+        } catch (e: Exception) {
+            JiraIssueActionResult.NetworkError(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
     private fun parseSearchResponse(status: Int, body: String): JiraSearchListResult {
         when (status) {
             200 -> return parseSearchBody(body)
             401, 403 -> return JiraSearchListResult.HttpError(
                 status,
-                "Authentication failed. Check email and API token (Settings | Tools | Jira).",
+                "Authentication failed. Check email and API token (Settings | Tools | Jira Companion).",
             )
             400 -> {
                 val msg = parseJiraErrorMessages(body) ?: "Invalid JQL or search request."
@@ -109,6 +255,32 @@ internal object JiraRestClient {
         }
     }
 
+    private fun parseIssueActionResponse(status: Int, body: String, successMessage: String): JiraIssueActionResult {
+        return when (status) {
+            200, 201, 204 -> JiraIssueActionResult.Ok(successMessage)
+            401, 403 -> JiraIssueActionResult.HttpError(
+                status,
+                "Authentication failed. Check email and API token (Settings | Tools | Jira Companion).",
+            )
+            400 -> JiraIssueActionResult.HttpError(
+                400,
+                parseJiraErrorMessages(body) ?: "Request is invalid.",
+            )
+            404 -> JiraIssueActionResult.HttpError(
+                404,
+                "Issue not found or you do not have permission to modify it.",
+            )
+            in 500..599 -> JiraIssueActionResult.HttpError(
+                status,
+                "Jira server error ($status). Try again later.",
+            )
+            else -> JiraIssueActionResult.HttpError(
+                status,
+                parseJiraErrorMessages(body) ?: "Request failed with HTTP $status.",
+            )
+        }
+    }
+
     private fun parseJiraErrorMessages(body: String): String? {
         return try {
             val err = JsonParser.parseString(body).asJsonObject
@@ -116,6 +288,18 @@ internal object JiraRestClient {
             if (arr != null && arr.size() > 0) arr.get(0).asString else null
         } catch (_: Exception) {
             null
+        }
+    }
+
+    /** Jira returns e.g. `2024-08-21T14:22:11.000+0000` (no colon in offset). */
+    private fun parseJiraUpdatedMillis(fields: JsonObject?): Long {
+        val s = fields?.get("updated")?.takeUnless { it.isJsonNull }?.asString?.trim().orEmpty()
+        if (s.isBlank()) return 0L
+        val normalized = s.replace(Regex("([+-])(\\d{2})(\\d{2})$"), "$1$2:$3")
+        return try {
+            OffsetDateTime.parse(normalized).toInstant().toEpochMilli()
+        } catch (_: Exception) {
+            0L
         }
     }
 
@@ -135,7 +319,8 @@ internal object JiraRestClient {
                 val fields = issue.getAsJsonObject("fields")
                 val summary = fields?.get("summary")?.asString ?: ""
                 val status = fields?.getAsJsonObject("status")?.get("name")?.asString ?: ""
-                list.add(JiraIssueListItem(key = key, summary = summary, status = status))
+                val updatedMs = parseJiraUpdatedMillis(fields)
+                list.add(JiraIssueListItem(key = key, summary = summary, status = status, updatedEpochMillis = updatedMs))
             }
             JiraSearchListResult.Ok(list)
         } catch (e: Exception) {
@@ -149,11 +334,11 @@ internal object JiraRestClient {
             200 -> return parseIssueBody(body)
             401, 403 -> return JiraFetchResult.HttpError(
                 status,
-                "Authentication failed. Check email and API token (Settings | Tools | Jira).$uriHint",
+                "Authentication failed. Check email and API token (Settings | Tools | Jira Companion).$uriHint",
             )
             404 -> return JiraFetchResult.HttpError(
                 status,
-                "Issue not found or no permission. Use only the issue key (e.g. KAN-1) or paste the /browse/… URL — not the whole site URL. In the sandbox IDE, set Settings | Tools | Jira again (settings are separate from your main IDE). Base URL must be https://yoursite.atlassian.net with no /jira.$uriHint",
+                "Issue not found or no permission. Use only the issue key (e.g. KAN-1) or paste the /browse/… URL — not the whole site URL. In the sandbox IDE, set Settings | Tools | Jira Companion again (settings are separate from your main IDE). Base URL must be https://yoursite.atlassian.net with no /jira.$uriHint",
             )
             in 500..599 -> return JiraFetchResult.HttpError(
                 status,
@@ -175,15 +360,19 @@ internal object JiraRestClient {
             val key = root.get("key")?.asString ?: return JiraFetchResult.NetworkError("Invalid response: missing issue key.")
             val fields = root.getAsJsonObject("fields")
             val summary = fields.get("summary")?.asString ?: ""
-            val status = fields.getAsJsonObject("status")?.get("name")?.asString ?: ""
-            val issueType = fields.getAsJsonObject("issuetype")?.get("name")?.asString ?: ""
+            val status = fields.getObject("status")?.get("name")?.asString ?: ""
+            val issueType = fields.getObject("issuetype")?.get("name")?.asString ?: ""
+            val assigneeObj = fields.getObject("assignee")
+            val assigneeAccountId = assigneeObj?.get("accountId")?.asString?.trim()?.ifBlank { null }
+            val assigneeDisplayName = assigneeObj?.get("displayName")?.asString?.trim()?.ifBlank { null }
+            val isWatching = fields.getObject("watches")?.get("isWatching")?.asBoolean ?: false
 
             val rendered = root.getAsJsonObject("renderedFields")
             val descHtml = rendered?.get("description")?.takeUnless { it.isJsonNull }?.asString?.takeIf { it.isNotBlank() }
 
             val plainFromAdf = fields.get("description")?.let { adfToPlain(it) }?.takeIf { it.isNotBlank() }
 
-            val comments = parseComments(fields.getAsJsonObject("comment"))
+            val comments = parseComments(fields.getObject("comment"))
 
             JiraFetchResult.Ok(
                 JiraIssueView(
@@ -191,6 +380,9 @@ internal object JiraRestClient {
                     summary = summary,
                     status = status,
                     issueType = issueType,
+                    assigneeAccountId = assigneeAccountId,
+                    assigneeDisplayName = assigneeDisplayName,
+                    isWatching = isWatching,
                     descriptionHtml = descHtml,
                     descriptionPlainFallback = plainFromAdf,
                     comments = comments,
@@ -232,5 +424,12 @@ internal object JiraRestClient {
             ""
         }
         return (text + rest).trim()
+    }
+
+    private fun JsonObject?.getObject(name: String): JsonObject? {
+        if (this == null) return null
+        val el = this.get(name) ?: return null
+        if (el.isJsonNull || !el.isJsonObject) return null
+        return el.asJsonObject
     }
 }

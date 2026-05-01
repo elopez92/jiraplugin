@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE idea-plugin PUBLIC "Plugin/DTD IDEA plugin" "https://plugins.jetbrains.com/dtds/plugin/1.0.dtd">
+<idea-plugin>
+    <!-- Merged when Git4Idea is present. No extra extensions; Git features are gated in code. -->
+</idea-plugin>

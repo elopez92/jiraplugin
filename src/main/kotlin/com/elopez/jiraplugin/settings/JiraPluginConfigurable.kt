@@ -19,7 +19,7 @@ class JiraPluginConfigurable : Configurable {
 
     private var root: JPanel? = null
 
-    override fun getDisplayName(): String = "Jira"
+    override fun getDisplayName(): String = "Jira Companion"
 
     override fun createComponent(): JComponent {
         val panel = FormBuilder.createFormBuilder()
