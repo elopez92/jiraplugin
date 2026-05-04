@@ -10,7 +10,7 @@ plugins {
 
 group = "com.elopez"
 // Marketplace rejects duplicate versions; use a new version for each upload (e.g. 1.0.1, 1.0.2).
-version = "1.0.0"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
@@ -114,6 +114,10 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <ul>
+                <li>Fix plugin/Marketplace icon: SVG <code>viewBox</code> now matches artwork (was effectively blank at 40×40)</li>
+            </ul>
+            <p><b>1.0.0</b></p>
             <ul>
                 <li>First public release as <b>Jira Companion</b></li>
                 <li>Tool window: issue lookup, JQL search, saved filters, issue detail with comments</li>
